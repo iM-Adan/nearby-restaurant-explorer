@@ -123,3 +123,7 @@ python -m pytest -q
 The API itself requires PostgreSQL, Redis, and Kafka; use Docker Compose to start those services. The standalone `demo.py` only exercises the in-memory spatial tree and does not require the service stack.
 
 GitHub Actions runs the tests and builds the Docker image on pushes and pull requests.
+
+## License
+
+This project is licensed under the [MIT License](./LICENSE).
