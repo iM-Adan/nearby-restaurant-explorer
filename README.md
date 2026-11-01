@@ -1,6 +1,6 @@
 # Nearby Restaurant Explorer
 
-A location-based restaurant discovery system engineered around a **custom 2-D Spatial Tree (k-d tree)** for sub-millisecond range queries, backed by a **Two-Tier Caching Architecture (L1 In-Memory LRU + L2 Redis)**, **PostgreSQL**, and **Apache Kafka** for asynchronous event ingestion and query telemetry.
+Finding a restaurant nearby can mean sorting through irrelevant places and waiting on broad, repeated location searches. Nearby Restaurant Explorer makes discovery more responsive and relevant: search a map by radius and cuisine, while a spatial index and two-tier cache narrow results quickly and Kafka handles restaurant updates and query analytics asynchronously.
 
 ---
 
