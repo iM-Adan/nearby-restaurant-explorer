@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nearby Restaurant Explorer — 2-D Tree & Multi-Tier Cache Visualizer</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --purple: #a855f7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { display: flex; height: 100vh; background: var(--bg); color: var(--text); overflow: hidden; }
+    #sidebar {
+      width: 400px; background: var(--panel); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; padding: 18px; gap: 14px; overflow-y: auto;
+    }
+    h1 { font-size: 1.15rem; font-weight: 700; color: var(--accent); }
+    .subtitle { font-size: 0.8rem; color: var(--muted); line-height: 1.4; }
+    .card {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .row { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; }
+    label { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+    input, select, button {
+      width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border);
+      background: #0f172a; color: var(--text); font-size: 0.85rem;
+    }
+    button {
+      background: var(--accent); color: #0f172a; font-weight: 700; cursor: pointer; border: none;
+      transition: opacity 0.15s;
+    }
+    button:hover { opacity: 0.9; }
+    .badge {
+      padding: 3px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 700;
+    }
+    .tier-L1_MEMORY { background: rgba(34,197,94,0.2); color: var(--green); }
+    .tier-L2_REDIS { background: rgba(245,158,11,0.2); color: var(--amber); }
+    .tier-KDTREE_COMPUTE { background: rgba(56,189,248,0.2); color: var(--accent); }
+    .tier-BRUTE_FORCE_SCAN { background: rgba(168,85,247,0.2); color: var(--purple); }
+    #results-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+    .rest-item {
+      padding: 8px; border-radius: 6px; background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border); font-size: 0.8rem; display: flex; justify-content: space-between;
+    }
+    #map { flex: 1; height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <div>
+      <h1>Nearby Restaurant Explorer</h1>
+      <p class="subtitle">Click anywhere on the map to execute a 2-D Tree spatial range query and inspect L1/L2 cache & pruning telemetry.</p>
+    </div>
+
+    <div class="card">
+      <label>Search Radius: <span id="rad-val">3.0</span> km</label>
+      <input type="range" id="radius" min="0.5" max="15" step="0.5" value="3.0" />
+
+      <label>Cuisine Filter</label>
+      <select id="cuisine">
+        <option value="">All Cuisines</option>
+        <option value="North Indian">North Indian</option>
+        <option value="South Indian">South Indian</option>
+        <option value="Mughlai">Mughlai</option>
+        <option value="Italian">Italian</option>
+        <option value="Pan-Asian">Pan-Asian</option>
+        <option value="Japanese">Japanese</option>
+        <option value="Cafe & Bakery">Cafe & Bakery</option>
+      </select>
+
+      <label>Execution Path</label>
+      <select id="mode">
+        <option value="default">Default (L1 LRU -> L2 Redis -> 2-D Tree)</option>
+        <option value="kdtree_only">Force 2-D Tree Traversal (Bypass Cache)</option>
+        <option value="brute_force">Force Brute-Force O(N) Scan</option>
+      </select>
+
+      <button id="search-btn">Run Spatial Query</button>
+    </div>
+
+    <div class="card">
+      <div class="row"><span>Source Tier:</span><span id="stat-tier" class="badge tier-KDTREE_COMPUTE">-</span></div>
+      <div class="row"><span>Execution Time:</span><strong id="stat-time">- ms</strong></div>
+      <div class="row"><span>2-D Tree Nodes Visited:</span><strong id="stat-nodes">-</strong></div>
+      <div class="row"><span>Matches Returned:</span><strong id="stat-count">-</strong></div>
+    </div>
+
+    <div class="card">
+      <label>Async Kafka Ingestion (Live Add at Map Center)</label>
+      <input type="text" id="new-name" placeholder="Restaurant Name (e.g. Aero Cyber Cafe)" />
+      <button id="ingest-btn" style="background: var(--green);">Publish to Kafka & Invalidate Cache</button>
+    </div>
+
+    <label>Matching Restaurants</label>
+    <div id="results-list"></div>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    let currentLat = 28.5458;
+    let currentLon = 77.1928;
+
+    const map = L.map('map').setView([currentLat, currentLon], 13);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    let searchCircle = null;
+    let markersLayer = L.layerGroup().addTo(map);
+
+    const radSlider = document.getElementById('radius');
+    const radVal = document.getElementById('rad-val');
+    radSlider.addEventListener('input', () => { radVal.textContent = radSlider.value; });
+
+    async function executeSearch(lat, lon) {
+      currentLat = lat;
+      currentLon = lon;
+      const radius = parseFloat(radSlider.value);
+      const cuisine = document.getElementById('cuisine').value;
+      const mode = document.getElementById('mode').value;
+
+      if (searchCircle) map.removeLayer(searchCircle);
+      searchCircle = L.circle([lat, lon], {
+        radius: radius * 1000,
+        color: '#38bdf8',
+        fillColor: '#38bdf8',
+        fillOpacity: 0.12,
+        weight: 2
+      }).addTo(map);
+
+      const params = new URLSearchParams({ lat, lon, radius_km: radius, mode, limit: 100 });
+      if (cuisine) params.append('cuisine', cuisine);
+
+      const res = await fetch(`/api/v1/restaurants/nearby?${params.toString()}`);
+      const data = await res.json();
+
+      const tierEl = document.getElementById('stat-tier');
+      tierEl.textContent = data.source_tier;
+      tierEl.className = `badge tier-${data.source_tier}`;
+      document.getElementById('stat-time').textContent = `${data.execution_time_ms} ms`;
+      document.getElementById('stat-nodes').textContent = `${data.kdtree_nodes_visited} / ${data.total_indexed_restaurants}`;
+      document.getElementById('stat-count').textContent = data.count;
+
+      markersLayer.clearLayers();
+      const listEl = document.getElementById('results-list');
+      listEl.innerHTML = '';
+
+      data.results.forEach(r => {
+        L.circleMarker([r.latitude, r.longitude], {
+          radius: 6, fillColor: '#22c55e', color: '#0f172a', weight: 1.5, fillOpacity: 0.9
+        }).bindPopup(`<b>${r.name}</b><br>${r.cuisine} • ⭐ ${r.rating}<br>${r.distance_km} km away`).addTo(markersLayer);
+
+        const item = document.createElement('div');
+        item.className = 'rest-item';
+        item.innerHTML = `<div><strong>${r.name}</strong><br><span style="color:#94a3b8">${r.cuisine} • ⭐ ${r.rating}</span></div><div>${r.distance_km} km</div>`;
+        listEl.appendChild(item);
+      });
+    }
+
+    map.on('click', e => executeSearch(e.latlng.lat, e.latlng.lng));
+    document.getElementById('search-btn').addEventListener('click', () => executeSearch(currentLat, currentLon));
+
+    document.getElementById('ingest-btn').addEventListener('click', async () => {
+      const nameInput = document.getElementById('new-name');
+      const name = nameInput.value.trim() || `New Spot @ ${currentLat.toFixed(3)}`;
+      const cuisine = document.getElementById('cuisine').value || 'North Indian';
+      await fetch('/api/v1/restaurants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name, cuisine, latitude: currentLat, longitude: currentLon, rating: 4.8, price_tier: 2
+        })
+      });
+      nameInput.value = '';
+      setTimeout(() => executeSearch(currentLat, currentLon), 250);
+    });
+
+    executeSearch(currentLat, currentLon);
+  </script>
+</body>
+</html>

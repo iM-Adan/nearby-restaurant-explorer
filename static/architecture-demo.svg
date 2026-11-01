@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">Nearby Restaurant Explorer system architecture</title>
+  <desc id="desc">Aligned architecture diagram of the browser UI, FastAPI, L1 and Redis caches, spatial tree, PostgreSQL, Kafka, and asynchronous workers.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#081525"/>
+      <stop offset="1" stop-color="#122b43"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#34d399"/>
+    </linearGradient>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#7dd3fc"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#6ee7b7"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#fbbf24"/>
+    </marker>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <style>
+      text { font-family: "Segoe UI", Arial, sans-serif; }
+      .title { fill: #f8fafc; font-size: 32px; font-weight: 700; }
+      .subtitle { fill: #a9c4d8; font-size: 16px; }
+      .section { fill: #91a9bd; font-size: 12px; font-weight: 700; letter-spacing: 1.5px; }
+      .node-title { fill: #f8fafc; font-size: 18px; font-weight: 700; }
+      .node-sub { fill: #b7c8d8; font-size: 12px; }
+      .small { fill: #94a3b8; font-size: 11px; }
+      .edge-label { fill: #cbd5e1; font-size: 11px; font-weight: 600; }
+      .node { fill: #10243a; stroke: #35516b; stroke-width: 1.5; }
+      .api { stroke: #a78bfa; }
+      .cache { stroke: #fbbf24; }
+      .index { stroke: #38bdf8; }
+      .data { stroke: #60a5fa; }
+      .event { stroke: #34d399; }
+      .worker { stroke: #fb923c; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" rx="24" fill="url(#background)"/>
+  <text x="720" y="55" text-anchor="middle" class="title">System architecture &amp; data flow</text>
+  <text x="720" y="84" text-anchor="middle" class="subtitle">Synchronous spatial search with asynchronous ingestion and analytics</text>
+
+  <text x="70" y="126" class="section">CLIENT</text>
+  <text x="70" y="260" class="section">API + LIVE QUERY PATH</text>
+  <text x="70" y="545" class="section">PERSISTENCE + EVENT PROCESSING</text>
+
+  <g>
+    <rect x="500" y="108" width="440" height="100" rx="16" class="node" stroke="#38bdf8"/>
+    <rect x="500" y="108" width="8" height="100" rx="4" fill="#38bdf8"/>
+    <circle cx="548" cy="158" r="22" fill="#103754" stroke="#38bdf8"/>
+    <path d="M536 151h24v17h-24zM541 146h14v5h-14z" fill="none" stroke="#bae6fd" stroke-width="2"/>
+    <text x="590" y="151" class="node-title">Browser · Leaflet map</text>
+    <text x="590" y="177" class="node-sub">Radius + cuisine search · map pins · add restaurant</text>
+  </g>
+
+  <path d="M720 208V242" fill="none" stroke="#7dd3fc" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
+  <text x="735" y="231" class="edge-label">HTTP</text>
+
+  <g>
+    <rect x="500" y="250" width="440" height="100" rx="16" class="node api"/>
+    <rect x="500" y="250" width="8" height="100" rx="4" fill="#a78bfa"/>
+    <circle cx="548" cy="300" r="22" fill="#302351" stroke="#a78bfa"/>
+    <path d="M538 293h20M538 300h20M538 307h14" stroke="#ddd6fe" stroke-width="2" stroke-linecap="round"/>
+    <text x="590" y="293" class="node-title">FastAPI · REST endpoints</text>
+    <text x="590" y="319" class="node-sub">Nearby / bounding-box search · ingestion · stats</text>
+  </g>
+
+  <path d="M610 350C610 374 250 364 250 398" fill="none" stroke="#7dd3fc" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
+  <text x="365" y="377" class="edge-label">1 · query</text>
+  <path d="M720 350C610 380 465 390 465 520V554H340V575" fill="none" stroke="#6ee7b7" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+  <text x="465" y="546" text-anchor="middle" class="edge-label">publish ingestion + analytics</text>
+
+  <g>
+    <rect x="70" y="405" width="360" height="112" rx="14" class="node cache"/>
+    <rect x="70" y="405" width="7" height="112" rx="3" fill="#fbbf24"/>
+    <circle cx="111" cy="452" r="19" fill="#473618" stroke="#fbbf24"/>
+    <path d="M102 446h18v13h-18zM105 442h12v4h-12z" fill="none" stroke="#fde68a" stroke-width="1.8"/>
+    <text x="145" y="446" class="node-title">L1 · in-memory LRU</text>
+    <text x="145" y="470" class="node-sub">Fast per-process cache</text>
+    <text x="94" y="498" class="small">Hit → return cached results</text>
+  </g>
+
+  <path d="M430 460H500" fill="none" stroke="#fbbf24" stroke-width="2.5" marker-end="url(#arrow-amber)"/>
+  <text x="465" y="447" text-anchor="middle" class="edge-label">miss</text>
+
+  <g>
+    <rect x="510" y="405" width="320" height="112" rx="14" class="node cache"/>
+    <rect x="510" y="405" width="7" height="112" rx="3" fill="#f59e0b"/>
+    <circle cx="551" cy="452" r="19" fill="#473618" stroke="#f59e0b"/>
+    <path d="M543 446h16v13h-16zM543 450h16M543 455h16" fill="none" stroke="#fde68a" stroke-width="1.5"/>
+    <text x="585" y="446" class="node-title">L2 · Redis</text>
+    <text x="585" y="470" class="node-sub">Shared TTL cache</text>
+    <text x="534" y="498" class="small">Hit → return · miss → compute</text>
+  </g>
+
+  <path d="M830 460H900" fill="none" stroke="#fbbf24" stroke-width="2.5" marker-end="url(#arrow-amber)"/>
+  <text x="865" y="447" text-anchor="middle" class="edge-label">miss</text>
+
+  <g>
+    <rect x="910" y="405" width="460" height="112" rx="14" class="node index"/>
+    <rect x="910" y="405" width="7" height="112" rx="3" fill="#38bdf8"/>
+    <circle cx="953" cy="452" r="19" fill="#103754" stroke="#38bdf8"/>
+    <circle cx="948" cy="448" r="3" fill="#bae6fd"/>
+    <circle cx="959" cy="444" r="3" fill="#bae6fd"/>
+    <circle cx="958" cy="457" r="3" fill="#bae6fd"/>
+    <path d="M950 447l7-2M950 450l6 6" stroke="#bae6fd" stroke-width="1.5"/>
+    <text x="988" y="446" class="node-title">2-D k-d tree + Haversine</text>
+    <text x="988" y="470" class="node-sub">Bounding-box pruning → exact distance → ranked matches</text>
+    <text x="934" y="498" class="small">Results + visited-node count → cache → API response</text>
+  </g>
+
+  <path d="M720 585V559H1110V527" fill="none" stroke="#60a5fa" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow-blue)"/>
+  <text x="850" y="575" text-anchor="middle" class="edge-label">startup load from PostgreSQL</text>
+
+  <g>
+    <rect x="70" y="585" width="420" height="150" rx="16" class="node event"/>
+    <rect x="70" y="585" width="7" height="150" rx="3" fill="#34d399"/>
+    <circle cx="114" cy="632" r="19" fill="#123b34" stroke="#34d399"/>
+    <path d="M105 626h18v13h-18zM110 622v4M118 622v4" fill="none" stroke="#a7f3d0" stroke-width="1.7"/>
+    <text x="148" y="630" class="node-title">Apache Kafka</text>
+    <text x="95" y="671" class="node-sub">restaurant-ingestion-events</text>
+    <text x="95" y="697" class="node-sub">spatial-query-analytics</text>
+    <text x="95" y="720" class="small">Durable event topics · asynchronous producers</text>
+  </g>
+
+  <g>
+    <rect x="550" y="585" width="330" height="150" rx="16" class="node data"/>
+    <rect x="550" y="585" width="7" height="150" rx="3" fill="#60a5fa"/>
+    <ellipse cx="594" cy="625" rx="18" ry="7" fill="#17365c" stroke="#93c5fd" stroke-width="1.5"/>
+    <path d="M576 625v28c0 4 8 8 18 8s18-4 18-8v-28M576 639c0 4 8 8 18 8s18-4 18-8" fill="none" stroke="#93c5fd" stroke-width="1.5"/>
+    <text x="628" y="631" class="node-title">PostgreSQL</text>
+    <text x="575" y="675" class="node-sub">Restaurants + query analytics</text>
+    <text x="575" y="703" class="small">Source of truth · restores tree on startup</text>
+  </g>
+
+  <g>
+    <rect x="940" y="585" width="430" height="150" rx="16" class="node worker"/>
+    <rect x="940" y="585" width="7" height="150" rx="3" fill="#fb923c"/>
+    <circle cx="984" cy="632" r="19" fill="#45291b" stroke="#fb923c"/>
+    <path d="M975 626h18v13h-18zM979 622h10v4h-10zM979 631h10M979 635h6" fill="none" stroke="#fed7aa" stroke-width="1.5"/>
+    <text x="1018" y="630" class="node-title">Background consumer</text>
+    <text x="965" y="671" class="node-sub">Ingestion → persist → update tree → invalidate caches</text>
+    <text x="965" y="697" class="node-sub">Analytics → persist latency and query counters</text>
+    <text x="965" y="720" class="small">Processes both Kafka topics outside the request path</text>
+  </g>
+
+  <path d="M490 683C650 766 820 766 940 683" fill="none" stroke="#6ee7b7" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+  <text x="714" y="774" text-anchor="middle" class="edge-label">consume</text>
+  <path d="M940 666H880" fill="none" stroke="#6ee7b7" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+  <text x="910" y="653" text-anchor="middle" class="edge-label">persist</text>
+  <path d="M1030 585V527" fill="none" stroke="#6ee7b7" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+  <path d="M1260 585V539H800V527" fill="none" stroke="#6ee7b7" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+  <text x="1050" y="533" text-anchor="middle" class="edge-label">invalidate cache</text>
+
+  <g>
+    <rect x="70" y="812" width="14" height="4" rx="2" fill="#7dd3fc"/>
+    <text x="92" y="818" class="small">Search path</text>
+    <rect x="202" y="812" width="14" height="4" rx="2" fill="#fbbf24"/>
+    <text x="224" y="818" class="small">Cache miss / compute</text>
+    <rect x="384" y="812" width="14" height="4" rx="2" fill="#6ee7b7"/>
+    <text x="406" y="818" class="small">Async events</text>
+    <text x="1370" y="818" text-anchor="end" class="small">Local services communicate over the private Compose network</text>
+  </g>
+
+  <circle r="6" fill="#7dd3fc" filter="url(#glow)">
+    <animateMotion dur="5s" repeatCount="indefinite" path="M720 208V242"/>
+  </circle>
+  <circle r="6" fill="#fbbf24" filter="url(#glow)">
+    <animateMotion dur="6s" repeatCount="indefinite" path="M430 460H500"/>
+  </circle>
+  <circle r="6" fill="#6ee7b7" filter="url(#glow)">
+    <animateMotion dur="7s" repeatCount="indefinite" path="M490 683C650 766 820 766 940 683"/>
+  </circle>
+</svg>
